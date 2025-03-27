@@ -1,5 +1,5 @@
 # TopoSort
-Algorithm for the classification of neural action potential.
+Algorithm for the classification of neural action potentials.
 
 We utilize UMAP, a non-linear dimensionality reduction technique, to provide a low dimensional representation of neuronal action potentials. In this low dimensional representation, leveraging the fact that UMAP preserves local structures, to cluster with a hierarchal density based clustering algorithm (HDBSCAN). 
 
