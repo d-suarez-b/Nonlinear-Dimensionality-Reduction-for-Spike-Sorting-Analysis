@@ -10,15 +10,11 @@ This method recreates the Conda environment that was used during development, in
 2.  Open your terminal or Anaconda Prompt.
 3.  Navigate to the root directory of this project (where `environment.yml` is located).
 4.  Create and activate the environment using the following commands:
-
     
-    # Create the environment from the file
     conda env create -f environment.yml
 
-    # Activate the newly created environment
     conda activate <environment_name_from_yml>
     
-
 **Method 2: Using `env_requirements.txt` with Pip**
 
 This method uses `pip` to install the required packages into a manually created Conda environment.
@@ -27,15 +23,16 @@ This method uses `pip` to install the required packages into a manually created 
 2.  Open your terminal or Anaconda Prompt.
 3.  Create a new Conda environment with a compatible Python version (e.g., Python 3.12).
 
-    # Replace <your_env_name> and choose the python version
+    (Replace <your_env_name> and choose the python version)
+    
     conda create --name <your_env_name> python=3.12
     
-4.  Activate the new environment:
+5.  Activate the new environment:
     
     conda activate <your_env_name>
     
-5.  Navigate to the root directory of this project (where `env_requirements.txt` is located).
-6.  Install the required packages using pip:
+6.  Navigate to the root directory of this project (where `env_requirements.txt` is located).
+7.  Install the required packages using pip:
     
     pip install -r env_requirements.txt
     
