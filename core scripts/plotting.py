@@ -698,7 +698,7 @@ class interactive_clustering(param.Parameterized):
         plt.close("All")
         self.selection = self.df.select(self.link.selection_expr).data.index
         self.raster_kwargs["a_dim"] = self.align_dropdown.value
-        self.raster_kwargs["xlim"] = self.align_dropdown.value
+        self.raster_kwargs["xlim"] = self.xlim_slider.value
         if self.raster is not None and self.raster_kwargs is not None:
             self.raster(
                 selection_index=self.selection,
