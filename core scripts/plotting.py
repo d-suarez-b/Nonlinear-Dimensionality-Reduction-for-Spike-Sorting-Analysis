@@ -798,92 +798,111 @@ class interactive_clustering(param.Parameterized):
 
     @param.depends("table_watcher")
     def cluster_table(self):
-        # --- Debug Info (plotting.py) ---
-        print("--- Debug Info inside cluster_table ---")
         value_counts_result = None # Initialize to None
         df_data = None             # Initialize to None
         try:
-            # Use pandas directly if self.df is already a DataFrame
-            # Otherwise, access .data if it's a HoloViews object
+            # Determine the underlying pandas DataFrame
             if isinstance(self.df, pd.DataFrame):
                  df_data = self.df
             elif hasattr(self.df, 'data') and isinstance(self.df.data, pd.DataFrame):
                  df_data = self.df.data
             else:
-                 print("Cannot determine DataFrame structure for self.df")
-                 # df_data remains None
+                 print("ERROR: Cannot determine DataFrame structure for self.df in cluster_table.")
+                 df_data = None # Ensure df_data is None if structure is unknown
 
-            if df_data is not None:
-                print("self.df type (underlying):", type(df_data))
-                print("self.df shape:", df_data.shape if hasattr(df_data, 'shape') else 'N/A')
-
-                if 'labs' in df_data.columns:
-                    print("self.df['labs'] head:\n", df_data['labs'].head())
-                    value_counts_result = df_data['labs'].value_counts()
-                    print("Value Counts:\n", value_counts_result)
-                    print("Is value_counts empty?", value_counts_result.empty)
-
-                    # Debug the temporary DataFrame creation method that failed
-                    temp_table_df_old_method = pd.DataFrame(
-                         value_counts_result, columns=["Number of Spikes"]
-                    )
-                    print("temp_table_df (OLD METHOD result):\n", temp_table_df_old_method)
-                    print("Is temp_table_df (OLD METHOD) empty?", temp_table_df_old_method.empty)
-
-                else:
-                    print("self.df['labs'] column not found in df_data")
+            # Calculate value_counts if possible
+            if df_data is not None and 'labs' in df_data.columns:
+                 value_counts_result = df_data['labs'].value_counts()
             else:
-                print("Could not extract DataFrame data from self.df")
+                 if df_data is None:
+                     print("ERROR: df_data is None, cannot calculate value_counts.")
+                 else: # df_data exists but 'labs' column missing
+                     print("ERROR: 'labs' column not found, cannot calculate value_counts.")
+                 value_counts_result = None # Ensure it's None
 
         except Exception as e:
-            print(f"DEBUG: Error during plotting.py debug prints: {e}")
-        print("--- End Debug Info ---")
-        # --- End Debug Info ---
+            print(f"ERROR: Exception during data access or value_counts in cluster_table: {e}")
+            value_counts_result = None
+            df_data = None # Reset df_data on error
 
         # --- Start of Corrected Logic ---
-        # Ensure df_data and value_counts_result are available from the try block
-        if df_data is None or 'labs' not in df_data.columns or value_counts_result is None:
-            print("ERROR: Missing data needed to create cluster table.")
-            # Handle error appropriately - maybe create an empty df or return None
-            self.table_df = pd.DataFrame(columns=["Number of Spikes"]) # Create empty df
-            # return None # Alternative: exit if data is bad
+        # Ensure value_counts_result was successfully calculated
+        if value_counts_result is None or value_counts_result.empty:
+            if value_counts_result is None:
+                 print("ERROR: Missing data (value_counts) needed to create cluster table.")
+            else: # value_counts_result is empty Series
+                 print("INFO: No non-zero counts found to create cluster table.")
+            # Create an empty df
+            self.table_df = pd.DataFrame(columns=["Number of Spikes"])
         else:
             # --- Create DataFrame explicitly (Corrected Method) ---
-            self.table_df = pd.DataFrame({
-                 'Number of Spikes': value_counts_result.values
-            }, index=value_counts_result.index)
-            # self.table_df.index.name = 'Index' # Optional: name index if needed
+            try:
+                 self.table_df = pd.DataFrame({
+                      'Number of Spikes': value_counts_result.values
+                 }, index=value_counts_result.index)
+                 # self.table_df.index.name = 'Index' # Optional: name index if needed
+            except Exception as e:
+                 print(f"ERROR: Failed to create DataFrame explicitly: {e}")
+                 self.table_df = pd.DataFrame(columns=["Number of Spikes"]) # Fallback to empty
             # --- End explicit creation ---
-
         # --- End of Corrected Logic ---
+
+        # NOTE: The old incorrect line below has been removed:
+        # self.table_df = pd.DataFrame(df_data["labs"].value_counts(), columns=["Number of Spikes"])
 
         # Check if table_df is empty *before* trying idxmin()
         if self.table_df.empty or self.table_df["Number of Spikes"].empty:
              print("WARNING: self.table_df or 'Number of Spikes' column is empty before idxmin!")
-             # Handle empty case: maybe assign a default, skip, or raise an error
-             self.next_cluster = -1 # Example: Assign default if empty
-             # Set an empty DataFrame for formatting if it failed
-             if self.table_df.empty:
-                 # Ensure 'Cluster' column exists for formatter even if empty
-                 self.table_df['Cluster'] = []
-                 self.table_df = self.table_df.astype({'Cluster': int}) # Match expected type
+             self.next_cluster = -1 # Assign default if empty
+             # Ensure 'Cluster' column exists for formatter even if empty
+             if 'Cluster' not in self.table_df.columns:
+                   self.table_df['Cluster'] = []
+                   # Try setting dtype if column was just added to empty frame
+                   try:
+                       self.table_df = self.table_df.astype({'Cluster': int})
+                   except Exception as e:
+                       print(f"WARNING: Could not set dtype for 'Cluster' column on empty frame: {e}")
+
         else:
              # Add 'Cluster' column only if DataFrame is not empty
              self.table_df["Cluster"] = self.table_df.index.astype(int)
              # Ensure there are non-zero counts before finding min if necessary
-             # (idxmin raises error on empty or all-NaN series, but value_counts shouldn't produce NaNs here)
-             if not self.table_df["Number of Spikes"].dropna().empty:
-                 self.next_cluster = self.table_df["Number of Spikes"].idxmin()
+             valid_spikes = self.table_df["Number of Spikes"].dropna()
+             if not valid_spikes.empty:
+                  # Check if all values are zero (or non-positive), idxmin might still behave unexpectedly depending on pandas version
+                  # If only zero counts exist, maybe default next_cluster?
+                  if (valid_spikes <= 0).all():
+                      print("WARNING: All cluster counts are zero or less.")
+                      self.next_cluster = -1 # Or perhaps self.table_df.index[0] if index guaranteed non-empty?
+                  else:
+                      try:
+                          self.next_cluster = valid_spikes.idxmin()
+                      except ValueError as e:
+                           print(f"ERROR: idxmin failed even on non-empty series: {e}")
+                           self.next_cluster = -1 # Fallback
              else:
-                 print("WARNING: 'Number of Spikes' column is empty or all NaN after potential dropna().")
-                 self.next_cluster = -1 # Fallback if no valid min
+                  print("WARNING: 'Number of Spikes' column is empty or all NaN after potential dropna().")
+                  self.next_cluster = -1 # Fallback if no valid min
 
-        # Ensure 'Cluster' column exists before formatting, even if table was initially empty
+        # Ensure 'Cluster' column exists before formatting, handles case where df was initially empty
         if 'Cluster' not in self.table_df.columns:
              self.table_df['Cluster'] = self.table_df.index.astype(int) if not self.table_df.empty else []
+             # Ensure dtype again just in case
+             try:
+                 self.table_df = self.table_df.astype({'Cluster': int})
+             except Exception as e:
+                 print(f"WARNING: Could not set dtype for 'Cluster' column before formatting: {e}")
+
+
+        # Add a final check before formatting
+        if not isinstance(self.table_df, pd.DataFrame) or "Cluster" not in self.table_df.columns:
+             print("ERROR: self.table_df is not a valid DataFrame with 'Cluster' column before formatting.")
+             # Return something safe, like an empty Panel object or None
+             return pn.pane.DataFrame(pd.DataFrame()) # Return empty pane
 
         styled_table = table_formatter(self.table_df, self.color_vector, ["Cluster"])
         return styled_table
+        
     def embedding_plots(self):
         kw_opts = {
             "shared_axes": False,
